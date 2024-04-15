@@ -1,0 +1,6 @@
+domain,type,value,ttl,user
+me.akash.com,A,192.0.3.2,5800,6616da66dc4762cf566bdbe2
+myself.akash.com,A,192.0.4.3,6800,6616da66dc4762cf566bdbe2
+iam.akash.com,A,192.0.5.4,7800,6616da66dc4762cf566bdbe2
+meet.akash.com,AAAA,192.0.4.3,8800,6616da66dc4762cf566bdbe2
+iam.akash.com,A,192.0.5.4,7800,6616da66dc4762cf566bdbe2
