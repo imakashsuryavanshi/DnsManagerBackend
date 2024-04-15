@@ -21,11 +21,11 @@ module.exports = {
       res.status(500).json({ message: err.message });
     }
   },
-  getFilteredRecords: async(req, res) =>{
+  getFilteredRecords: async (req, res) => {
     try {
       // Extract filter parameters from the request query
       const { filter, value } = req.query;
-       console.log(filter +  " " + value);
+      console.log(filter + " " + value);
       // Perform filtering based on the specified criteria
       let filteredRecords;
       if (filter && value) {
@@ -35,7 +35,7 @@ module.exports = {
         // If no filter parameters provided, return all DNS records
         filteredRecords = await dnsModel.find();
       }
-  
+
       // Return filtered data as response
       res.status(200).json({ success: true, data: filteredRecords });
     } catch (error) {
@@ -44,22 +44,22 @@ module.exports = {
       res.status(500).json({ success: false, message: 'Internal server error' });
     }
   },
-  getDataDistribution: async(req, res) =>{
+  getDataDistribution: async (req, res) => {
     try {
       // Extract parameter for data distribution from the request query
       const { parameter } = req.query;
-  
+
       // Check if parameter is provided
       if (!parameter) {
         return res.status(400).json({ success: false, message: 'Parameter for data distribution is required' });
       }
-  
+
       // Construct the aggregation pipeline to calculate data distribution based on the provided parameter
       const distributionPipeline = [
         { $group: { _id: '$' + parameter, count: { $sum: 1 } } } // Group and count records based on the parameter
       ];
       const distribution = await dnsModel.aggregate(distributionPipeline);
-  
+
       // Return data distribution as response
       res.status(200).json({ success: true, distribution: distribution });
     } catch (error) {
@@ -79,17 +79,6 @@ module.exports = {
         return res.status(400).json({ message: 'DNS record already exists for this domain' });
       }
 
-      // Create new DNS record in MongoDB
-      const newRecord = new dnsModel({
-        domain,
-        type,
-        value,
-        ttl,
-        user
-      });
-
-      await newRecord.save();
-
       // Create DNS record in Route 53
       const route53Response = await route53.changeResourceRecordSets({
         HostedZoneId: process.env.HOSTED_ZONE_ID,
@@ -108,15 +97,25 @@ module.exports = {
 
       // Check if the Route 53 operation was successful
       if (route53Response.ChangeInfo.Status === 'PENDING') {
+        // Create new DNS record in MongoDB
+        const newRecord = new dnsModel({
+          domain,
+          type,
+          value,
+          ttl,
+          user
+        });
+
+        await newRecord.save();
         return res.status(200).json(newRecord);
       } else {
         // If Route 53 operation failed, delete the newly created record from MongoDB
-        await newRecord.delete();
+        //await newRecord.delete();
         return res.status(500).json({ message: 'Failed to create DNS record in Route 53' });
       }
     } catch (error) {
       console.error('Error occurred during DNS record creation:', error);
-      return res.status(500).json({ message: 'Internal Server Error' });
+      return res.status(500).json({ message: error.message});
     }
   },
   updateDns: async (req, res) => {
@@ -220,10 +219,10 @@ module.exports = {
         return res.status(500).json({ message: 'Failed to delete DNS record in Route 53' });
       }
     } catch (err) {
-      res.status(500).json({ errormessage: err.message });
+      res.status(500).json({ message: err.message });
     }
   },
-  bulkUpload: async (req, res) => {  
+  bulkUpload: async (req, res) => {
     console.log(req.file);
     try {
       // Ensure the request contains a file
