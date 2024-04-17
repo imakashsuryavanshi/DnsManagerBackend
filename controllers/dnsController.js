@@ -166,6 +166,26 @@ function extractDomain(fullDomain) {
   return parts.slice(-2).join('.');
 }
 
+async function countRecordsInZone(hostedZoneId) {
+  try {
+    // Call the AWS Route 53 API to list resource record sets in the hosted zone
+    const response = await route53.listResourceRecordSets({ HostedZoneId: hostedZoneId }).promise();
+    
+    // Calculate the number of records in the hosted zone
+    let recordCount = response.ResourceRecordSets.length;
+    recordCount -= 2;
+    
+    // Ensure the count is non-negative
+    if (recordCount < 0) {
+      recordCount = 0;
+    }
+    return recordCount;
+  } catch (error) {
+    console.error('Error counting records in zone:', error);
+    throw error;
+  }
+}
+
 
 module.exports = {
   listDns: async (req, res) => {
@@ -196,20 +216,50 @@ module.exports = {
 
   getDataDistribution: async (req, res) => {
     try {
-      const { parameter } = req.query;
-      if (!parameter) {
-        return res.status(400).json({ success: false, message: 'Parameter for data distribution is required' });
+      // Retrieve hosted zones from AWS Route 53
+      const hostedZonesResponse = await route53.listHostedZones({}).promise();
+      
+      // Check if hosted zones are retrieved successfully
+      if (!hostedZonesResponse.HostedZones || !Array.isArray(hostedZonesResponse.HostedZones)) {
+        console.error('Error fetching hosted zones:', hostedZonesResponse);
+        return res.status(500).json({ success: false, message: 'Error fetching hosted zones from Route 53' });
       }
-      const distributionPipeline = [
-        { $group: { _id: '$' + parameter, count: { $sum: 1 } } }
-      ];
-      const distribution = await dnsModel.aggregate(distributionPipeline);
-      res.status(200).json({ success: true, distribution: distribution });
+      
+      // For Domain Distribution Chart: Count main domains directly
+      const mainDomains = hostedZonesResponse.HostedZones.map(zone => {
+        const domain = zone.Name.replace(/\.$/, ''); // Remove trailing dot
+        return extractDomain(domain);
+      });
+  
+      // Create an array to store domain distribution data
+      const domainDistribution = [];
+      
+      // Iterate through main domains and count records in each zone
+      await Promise.all(mainDomains.map(async (domain) => {
+        const hostedZoneId = await getHostedZoneId(domain);
+        if (hostedZoneId) {
+          const recordCount = await countRecordsInZone(hostedZoneId);
+          domainDistribution.push({ domain: domain, count: recordCount });
+        }
+      }));
+  
+      // For Record Type Distribution Chart: Fetch data from the database
+  
+      // Example code for fetching record type distribution data from the database
+      const recordTypeDistribution = await dnsModel.aggregate([
+        { $group: { _id: '$type', count: { $sum: 1 } } }
+      ]);
+  
+      res.status(200).json({ success: true, domainDistribution: domainDistribution, recordTypeDistribution: recordTypeDistribution });
     } catch (error) {
       console.error('Error fetching data distribution:', error);
       res.status(500).json({ success: false, message: 'Internal server error' });
     }
   },
+  
+  
+  
+  
 
   createDns: async (req, res) => {
     const { domain, type, value, ttl, user } = req.body;
